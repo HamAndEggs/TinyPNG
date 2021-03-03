@@ -15,6 +15,14 @@ struct PNGChunk
     uint32_t mCRC;
     bool mOK;
 
+    bool operator == (const char* pChunkName)const
+    {
+        return  mType[0] == pChunkName[0] &&
+                mType[1] == pChunkName[1] &&
+                mType[2] == pChunkName[2] &&
+                mType[3] == pChunkName[3];
+    }
+
     PNGChunk(const std::vector<uint8_t>& pMemory,size_t& pCurrentPosition) :
         mLength(0),
         mData(nullptr),
@@ -23,27 +31,27 @@ struct PNGChunk
         const uint8_t* data = pMemory.data() + pCurrentPosition;
         const uint8_t* end = pMemory.data() + pMemory.size();
 
-        assert( data + 4 < end );
-        if( data + 4 < end )
+        assert( data + 4 <= end );
+        if( data + 4 <= end )
         {
             mLength = be32toh(*((uint32_t*)data));
             data += 4;
-            assert( data + 4 < end );
-            if( data + 4 < end )
+            assert( data + 4 <= end );
+            if( data + 4 <= end )
             {
                 mType[0] = ((char*)data)[0];
                 mType[1] = ((char*)data)[1];
                 mType[2] = ((char*)data)[2];
                 mType[3] = ((char*)data)[3];
                 data += 4;
-                assert( data + mLength < end );
-                if( data + mLength < end )
+                assert( data + mLength <= end );
+                if( data + mLength <= end )
                 {
                     mData = data;
                     data += mLength;
 
-                    assert( data + 4 < end );
-                    if( data + 4 < end )
+                    assert( data + 4 <= end );
+                    if( data + 4 <= end )
                     {
                         pCurrentPosition += 12 + mLength;
                         mCRC = be32toh(*((uint32_t*)data));
@@ -61,7 +69,11 @@ struct PNGChunk
 };
 
 Loader::Loader(bool pVerbose) :
-    mVerbose(pVerbose)
+    mVerbose(pVerbose),
+    mWidth(0),
+    mHeight(0),
+    mBitDepth(0),
+    mType(CT_INVALID)
 {
 }
 
@@ -127,7 +139,65 @@ bool Loader::LoadFromMemory(const std::vector<uint8_t>& pMemory)
         PNGChunk chunk(pMemory,currentPos);
         if( chunk.mOK )
         {
-            std::clog << "Chunk: " << chunk.mType << "\n";
+            if( chunk == "IEND" )
+            {
+                if( mVerbose )
+                {
+                    std::clog << "Chunk IEND found, ending read\n";
+                    return true;
+                }
+            }
+            else if( chunk == "IHDR" )
+            {
+                assert( chunk.mLength == 13 );
+                if( chunk.mLength != 13 )
+                {
+                    if( mVerbose )
+                    {
+                        std::clog << "Chunk: IHDR wrong size, should be 13 bytes, is reported as " << chunk.mLength << " bytes\n";
+                    }                    
+                    return false;
+                }
+
+                const uint8_t* data = chunk.mData;
+
+                mWidth = be32toh(*((uint32_t*)data));data += 4;
+                mHeight = be32toh(*((uint32_t*)data));data += 4;
+                mBitDepth = (int)(data[0]);
+                mType = (PNGColourType)(data[1]);
+                mCompressionMethod = (PNGColourType)(data[2]);
+                mFilterMethod = (int)(data[3]);
+                mInterlaceMethod = (int)(data[4]);
+
+                if( mVerbose )
+                {
+                    std::clog << "Image Header:" <<
+                                " Width " << mWidth <<
+                                " Height " << mHeight <<
+                                " Bit Depth " << mBitDepth <<
+                                " Colour Type " << mType <<
+                                " Compression Method " << mCompressionMethod <<
+                                " Filter Method " << mFilterMethod <<                     
+                                " Interlace Method " << mInterlaceMethod
+                                << "\n";
+                }
+
+                // Prepare the image buffers.
+                // Internally I store as 8 bit per channel.
+                // So for 16bit channel data we'll be loosing data. 
+                // This is not meant to be an all signing all dancing implementation.
+                // Just a tiny one. :)
+                mRed.resize(mWidth*mHeight);
+                mGreen.resize(mWidth*mHeight);
+                mBlue.resize(mWidth*mHeight);
+                mAlpha.resize(mWidth*mHeight);
+
+            }
+            else if( mVerbose )
+            {
+                std::clog << "Chunk: " << std::string(chunk.mType,4) << "\n";
+            }
+
         }
         else
         {

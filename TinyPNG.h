@@ -14,8 +14,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  
    
-   Original code base is at https://github.com/HamAndEggs/TinyJson
+   Original code base is at https://github.com/HamAndEggs/TinyPNG
    
+   Resources used,
+   https://en.wikipedia.org/wiki/Portable_Network_Graphics
+   https://www.w3.org/TR/PNG/#5Chunk-layout
+
    */
 
 #ifndef TINY_PNG_H
@@ -30,6 +34,17 @@ namespace tinypng{ // Using a namespace to try to prevent name clashes as my cla
 class Loader
 {
 public:
+
+    enum PNGColourType
+    {
+        CT_GREY_SCALE = 0,
+        CT_TRUE_COLOUR = 2,
+        CT_INDEX_COLOUR = 3,
+        CT_GREYSCALE_WITH_ALPHA = 4,
+        CT_TRUE_COLOUR_WITH_ALPHA = 6,
+
+        CT_INVALID = 255
+    };
 
     /**
      * @brief Construct a new PNG Loader
@@ -60,10 +75,15 @@ private:
     const bool mVerbose;
     int mWidth;
     int mHeight;
+    int mBitDepth;
+    PNGColourType mType;
+    int mCompressionMethod;
+    int mFilterMethod;
+    int mInterlaceMethod;
 
     // When I load I split out the channels like this to help avoid endian issues.
     // There will be supporting functions to return the data in the most popular arrangements.
-    const std::vector<uint8_t> mRed,mGreen,mBlue,mAlpha;
+    std::vector<uint8_t> mRed,mGreen,mBlue,mAlpha;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
