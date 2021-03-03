@@ -22,6 +22,7 @@
 #define TINY_PNG_H
 
 #include <vector>
+#include <string>
 
 namespace tinypng{ // Using a namespace to try to prevent name clashes as my class names are kind of obvious :)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

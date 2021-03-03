@@ -1,7 +1,7 @@
 {
     "source_files": [
         "unit-tests.cpp",
-        "../TinyPng.cpp"
+        "../TinyPNG.cpp"
     ],
     "configurations": {
         "debug": {
