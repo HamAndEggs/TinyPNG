@@ -325,11 +325,11 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 // 3	Average	Filt(x) = Orig(x) - floor((Orig(a) + Orig(b)) / 2)	Recon(x) = Filt(x) + floor((Recon(a) + Recon(b)) / 2)
 // 4	Paeth	Filt(x) = Orig(x) - PaethPredictor(Orig(a), Orig(b), Orig(c))	Recon(x) = Filt(x) + PaethPredictor(Recon(a), Recon(b), Recon(c))
 
-    auto Previous = [this](const uint8_t* pC)
+    auto PreviousRow = [this](const uint8_t* pC)
     {
         const int b = *(pC - mWidth);
         const int x = *pC;
-        return (uint8_t)((x + b)&0xff);
+        return (uint8_t)((x + b));
     };
 
     auto Average = [this](const uint8_t* pC)
@@ -337,7 +337,7 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
         const int a = *(pC - 1);
         const int b = *(pC - mWidth);
         const int x = *pC;
-        return (uint8_t)(x + ((a + b) / 2));
+        return (uint8_t)((x + ((a + b) / 2)));
     };
 
     auto Paeth = [this](const uint8_t* pC)
@@ -435,16 +435,17 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
             // Add the previous rows value onto the current one.
             for( size_t x = 0 ; x < mWidth ; x++ )
             {
-                r[x] = Previous(r + x);
-                g[x] = Previous(g + x);
-                b[x] = Previous(b + x);
+                r[x] = PreviousRow(r + x);
+                g[x] = PreviousRow(g + x);
+                b[x] = PreviousRow(b + x);
             }
             break;
 
         case 3://Average
-            r[0] = Previous(r);
-            g[0] = Previous(g);
-            b[0] = Previous(b);
+            r[0] = (uint8_t)(((int)(r[0]) + (int)(*(r-mWidth))/2) & 0xff);
+            g[0] = (uint8_t)(((int)(g[0]) + (int)(*(g-mWidth))/2) & 0xff);
+            b[0] = (uint8_t)(((int)(b[0]) + (int)(*(b-mWidth))/2) & 0xff);
+
             for( size_t x = 1 ; x < mWidth ; x++ )
             {
                 r[x] = Average(r + x);
@@ -454,9 +455,9 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
             break;
 
         case 4://paeth
-            r[0] = Previous(r);
-            g[0] = Previous(g);
-            b[0] = Previous(b);
+            r[0] = PreviousRow(r);
+            g[0] = PreviousRow(g);
+            b[0] = PreviousRow(b);
             for( size_t x = 1 ; x < mWidth ; x++ )
             {
                 r[x] = Paeth(r + x);
