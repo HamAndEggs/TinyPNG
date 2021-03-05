@@ -51,7 +51,7 @@ public:
      * 
      * @param pVerbose If true then debug information will be sent to std::log
      */
-    Loader(bool pVerbose);
+    Loader(bool pVerbose = false);
 
     /**
      * @brief Loads the PNG from file
@@ -71,10 +71,22 @@ public:
      */
     bool LoadFromMemory(const std::vector<uint8_t>& pMemory);
 
+    uint32_t GetWidth()const{return mWidth;}
+    uint32_t GetHeight()const{return mHeight;}
+
+    /**
+     * @brief Will return a 24bit image in RGB order. Will convert the original data to correct bit depth. Alpha is ignored.
+     * 
+     * @param rRGB 
+     * @return true 
+     * @return false 
+     */
+    bool GetRGB(std::vector<uint8_t>& rRGB)const;
+
 private:
     const bool mVerbose;
-    int mWidth;
-    int mHeight;
+    uint32_t mWidth;
+    uint32_t mHeight;
     int mBitDepth;
     PNGColourType mType;
     int mCompressionMethod;
@@ -84,6 +96,13 @@ private:
     // When I load I split out the channels like this to help avoid endian issues.
     // There will be supporting functions to return the data in the most popular arrangements.
     std::vector<uint8_t> mRed,mGreen,mBlue,mAlpha;
+
+    void PushGreyscalePixels(const std::vector<uint8_t>& pImageData);
+    void PushTrueColour(const std::vector<uint8_t>& pImageData);
+    void PushIndexPixels(const std::vector<uint8_t>& pImageData);
+    void PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData);
+    void PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData);
+
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
