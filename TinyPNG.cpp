@@ -312,7 +312,6 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 {
     std::vector<uint8_t> filters(mHeight);
 
-
 // x	the byte being filtered;
 // a	the byte corresponding to x in the pixel immediately before the pixel containing x (or the byte immediately before x, when the bit depth is less than 8);
 // b	the byte corresponding to x in the previous scanline;
@@ -324,6 +323,13 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 // 2	Up      Filt(x) = Orig(x) - Orig(b)	Recon(x) = Filt(x) + Recon(b)
 // 3	Average	Filt(x) = Orig(x) - floor((Orig(a) + Orig(b)) / 2)	Recon(x) = Filt(x) + floor((Recon(a) + Recon(b)) / 2)
 // 4	Paeth	Filt(x) = Orig(x) - PaethPredictor(Orig(a), Orig(b), Orig(c))	Recon(x) = Filt(x) + PaethPredictor(Recon(a), Recon(b), Recon(c))
+
+    auto PreviousPixel = [this](const uint8_t* pC)
+    {
+        const int a = *(pC - 1);
+        const int x = *pC;
+        return (uint8_t)((x + a));
+    };
 
     auto PreviousRow = [this](const uint8_t* pC)
     {
@@ -425,9 +431,9 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
             // Add the previous value onto the current one.
             for( size_t x = 1 ; x < mWidth ; x++ )
             {
-                r[x] = (uint8_t)(((int)(r[x]) + (int)(r[x-1])) & 0xff);
-                g[x] = (uint8_t)(((int)(g[x]) + (int)(g[x-1])) & 0xff);
-                b[x] = (uint8_t)(((int)(b[x]) + (int)(b[x-1])) & 0xff);
+                r[x] = PreviousPixel(r + x);
+                g[x] = PreviousPixel(g + x);
+                b[x] = PreviousPixel(b + x);
             }
             break;
 
