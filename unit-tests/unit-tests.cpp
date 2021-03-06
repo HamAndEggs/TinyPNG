@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <array>
 #include <assert.h>
 #include <unistd.h>
 
@@ -16,26 +17,44 @@ static bool UnitTest1(FBIO::FrameBuffer* FB)
 {
     std::cout << "Running test, small PNG\n";
 
-    tinypng::Loader rose(true);
+    tinypng::Loader png(true);
 
-    if( rose.LoadFromFile("./rose.png") )
+    const std::array<const char*,3> tests = {
+        "./rose.png",
+        "./rgb-8.png",
+        "./rgb-16.png",
+    };
+
+    for( auto f : tests )
     {
-        FB->ClearScreen(0,0,0);
-
-        std::vector<uint8_t> RGB;
-
-        if( rose.GetRGB(RGB) )
+        if( png.LoadFromFile(f) )
         {
-            FB->BlitRGB24(RGB.data(),0,0,rose.GetWidth(),rose.GetHeight());
+            FB->ClearScreen(0,0,0);
+
+            std::vector<uint8_t> RGB;
+
+            if( png.GetRGB(RGB) )
+            {
+                FB->BlitRGB24(RGB.data(),0,0,png.GetWidth(),png.GetHeight());
+            }
+            else
+            {
+                std::cout << "Failed to get RGB for PNG " << f << "\n";
+                return false;
+            }
+
+            FB->Present();
+
+            sleep(5);
         }
-
-        FB->Present();
-
-        sleep(5);
-        return true;
+        else
+        {
+            std::cout << "Failed to load PNG " << f << "\n";
+            return false;
+        }
     }
 
-    return false;
+    return true;
 }
 
 int main(int argc, char *argv[])
