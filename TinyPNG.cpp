@@ -204,121 +204,21 @@ bool Loader::LoadFromMemory(const std::vector<uint8_t>& pMemory)
         PNGChunk chunk(pMemory,currentReadPos);
         if( chunk.mOK )
         {
-            if( chunk == "IEND" )
+            if( chunk == "IHDR" )
             {
-                // This is a bit ham fisted but as PNG does not tell you what the decompressed IDAT size is I will
-                // create a decompression buffer that is used. It is set to the size of the entire image.
-                std::vector<uint8_t> imageBuffer;
-                imageBuffer.resize(mWidth*mHeight*8);
-
-                std::clog << "Decompressing " << compressionData.size() << " bytes to possibly " << imageBuffer.size() << " bytes\n";
-
-                z_stream infstream;
-                infstream.zalloc = Z_NULL;
-                infstream.zfree = Z_NULL;
-                infstream.opaque = Z_NULL;
-                // setup "b" as the input and "c" as the compressed output
-                infstream.avail_in = compressionData.size(); // size of input
-                infstream.next_in = (Bytef *)compressionData.data(); // input char array
-                infstream.avail_out = (uInt)imageBuffer.size(); // size of output
-                infstream.next_out = (Bytef *)imageBuffer.data(); // output char array
-
-                inflateInit(&infstream);
-                inflate(&infstream, Z_NO_FLUSH);
-                inflateEnd(&infstream);
-            
-                if( infstream.total_out <= 0 )
-                    return false;
-
-                std::clog << "Decompressed size is " << infstream.total_out << "\n";
-
-                switch( mType )
+                if( ReadImageHeader(chunk) == false )
                 {
-                case CT_GREY_SCALE:
-                    PushGreyscalePixels(imageBuffer);
-                    break;
-
-                case CT_TRUE_COLOUR:
-                    PushTrueColour(imageBuffer);
-                    break;
-
-                case CT_INDEX_COLOUR:
-                    PushIndexPixels(imageBuffer);
-                    break;
-
-                case CT_GREYSCALE_WITH_ALPHA:
-                    PushGreyscaleAlphaPixels(imageBuffer);
-                    break;
-
-                case CT_TRUE_COLOUR_WITH_ALPHA:
-                    PushTrueColourAlphaPixels(imageBuffer);
-                    break;
-
-                case CT_INVALID:
-                default:
-                    if( mVerbose )
-                    {
-                        std::cerr << "Image contains invalid image type when trying to read image data\n";
-                    }
                     return false;
                 }
-
-                if( mVerbose )
-                {
-                    std::cerr << "Chunk IEND found, ending read\n";
-                }
-                return true;
-            }
-            else if( chunk == "IHDR" )
-            {
-                assert( chunk.mLength == 13 );
-                if( chunk.mLength != 13 )
-                {
-                    if( mVerbose )
-                    {
-                        std::cerr << "Chunk: IHDR wrong size, should be 13 bytes, is reported as " << chunk.mLength << " bytes\n";
-                    }                    
-                    return false;
-                }
-
-                const uint8_t* data = chunk.mData;
-
-                mWidth = be32toh(*((uint32_t*)data));data += 4;
-                mHeight = be32toh(*((uint32_t*)data));data += 4;
-                mBitDepth = (int)(data[0]);
-                mType = (PNGColourType)(data[1]);
-                mCompressionMethod = (PNGColourType)(data[2]);
-                mFilterMethod = (int)(data[3]);
-                mInterlaceMethod = (int)(data[4]);
-
-                if( mVerbose )
-                {
-                    std::clog << "Image Header:" <<
-                                " Width " << mWidth <<
-                                " Height " << mHeight <<
-                                " Bit Depth " << mBitDepth <<
-                                " Colour Type " << mType <<
-                                " Compression Method " << mCompressionMethod <<
-                                " Filter Method " << mFilterMethod <<                     
-                                " Interlace Method " << mInterlaceMethod
-                                << "\n";
-                }
-
-                // Prepare the image buffers.
-                // Internally I store as 8 bit per channel.
-                // So for 16bit channel data we'll be loosing data. 
-                // This is not meant to be an all signing all dancing implementation.
-                // Just a tiny one. :)
-                mRed.resize(mWidth*mHeight);
-                mGreen.resize(mWidth*mHeight);
-                mBlue.resize(mWidth*mHeight);
-                mAlpha.resize(mWidth*mHeight);
-
             }
             else if( chunk == "IDAT" )
             {
                 compressionData.insert(compressionData.end(),chunk.mData,chunk.mData + chunk.mLength);
 
+            }
+            else if( chunk == "IEND" )
+            {
+                return BuildImage(compressionData);
             }
             else if( mVerbose )
             {
@@ -373,14 +273,161 @@ void Loader::Clear()
 
 }
 
-void Loader::PushGreyscalePixels(const std::vector<uint8_t>& pImageData)
+bool Loader::ReadImageHeader(const PNGChunk& pChunk)
 {
+    assert( pChunk.mLength == 13 );
 
+    if( pChunk.mLength != 13 )
+    {
+        if( mVerbose )
+        {
+            std::cerr << "Chunk: IHDR wrong size, should be 13 bytes, is reported as " << pChunk.mLength << " bytes\n";
+        }                    
+        return false;
+    }
+
+    const uint8_t* data = pChunk.mData;
+
+    mWidth = be32toh(*((uint32_t*)data));data += 4;
+    mHeight = be32toh(*((uint32_t*)data));data += 4;
+    mBitDepth = (int)(data[0]);
+    mType = (PNGColourType)(data[1]);
+    mCompressionMethod = (PNGColourType)(data[2]);
+    mFilterMethod = (int)(data[3]);
+    mInterlaceMethod = (int)(data[4]);
+
+    // I will improve this when all is working and I can have a think about a nice clear way to do it.
+    // For now fucus on maintenance and readability.
+    mBytesPerPixel = 0;
+    mHasAlpha = false;
+    switch( mType )
+    {
+    case CT_GREY_SCALE:
+    case CT_INDEX_COLOUR:
+        mBytesPerPixel = 2;
+        break;
+
+    case CT_TRUE_COLOUR:
+        mBytesPerPixel = mBitDepth == 8 ? 3 : 6;
+        break;
+
+    case CT_GREYSCALE_WITH_ALPHA:
+        mHasAlpha = true;
+        mBytesPerPixel = 2;
+        break;
+
+    case CT_TRUE_COLOUR_WITH_ALPHA:
+        mHasAlpha = true;
+        mBytesPerPixel = mBitDepth == 8 ? 4 : 8;
+        break;
+
+    case CT_INVALID:
+    default:
+        if( mVerbose )
+        {
+            std::cerr << "Image contains invalid image type when trying to read image data\n";
+        }
+        return false;
+    }                
+
+    if( mVerbose )
+    {
+        std::clog << "Image Header:" <<
+                    " Width " << mWidth <<
+                    " Height " << mHeight <<
+                    " Bit Depth " << mBitDepth <<
+                    " Bytes Per Pixel " << mBytesPerPixel <<
+                    " Colour Type " << mType <<
+                    " Compression Method " << mCompressionMethod <<
+                    " Filter Method " << mFilterMethod <<                     
+                    " Interlace Method " << mInterlaceMethod
+                    << "\n";
+    }
+    return true;
 }
 
-void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
+bool Loader::BuildImage(const std::vector<uint8_t>& pCompressionData)
 {
-    std::vector<uint8_t> filters(mHeight);
+    // This is a bit ham fisted but as PNG does not tell you what the decompressed IDAT size is I will
+    // create a decompression buffer that is used. It is set to the size of the entire image.
+    std::vector<uint8_t> imageBuffer;
+    imageBuffer.resize(mWidth*mHeight*8);
+
+    std::clog << "Decompressing " << pCompressionData.size() << " bytes to possibly " << imageBuffer.size() << " bytes\n";
+
+    z_stream infstream;
+    infstream.zalloc = Z_NULL;
+    infstream.zfree = Z_NULL;
+    infstream.opaque = Z_NULL;
+    // setup "b" as the input and "c" as the compressed output
+    infstream.avail_in = pCompressionData.size(); // size of input
+    infstream.next_in = (Bytef *)pCompressionData.data(); // input char array
+    infstream.avail_out = (uInt)imageBuffer.size(); // size of output
+    infstream.next_out = (Bytef *)imageBuffer.data(); // output char array
+
+    inflateInit(&infstream);
+    inflate(&infstream, Z_NO_FLUSH);
+    inflateEnd(&infstream);
+
+    if( infstream.total_out <= 0 )
+        return false;
+
+    std::clog << "Decompressed size is " << infstream.total_out << "\n";
+
+    std::vector<uint8_t> rowFilters;
+    FillColourPlanes(imageBuffer,rowFilters);
+
+    switch( mType )
+    {
+    case CT_GREY_SCALE:
+        PushGreyscalePixels(imageBuffer,rowFilters);
+        break;
+
+    case CT_TRUE_COLOUR:
+        PushTrueColour(imageBuffer,rowFilters);
+        break;
+
+    case CT_INDEX_COLOUR:
+        PushIndexPixels(imageBuffer,rowFilters);
+        break;
+
+    case CT_GREYSCALE_WITH_ALPHA:
+        PushGreyscaleAlphaPixels(imageBuffer,rowFilters);
+        break;
+
+    case CT_TRUE_COLOUR_WITH_ALPHA:
+        PushTrueColourAlphaPixels(imageBuffer,rowFilters);
+        break;
+
+    case CT_INVALID:
+    default:
+        if( mVerbose )
+        {
+            std::cerr << "Image contains invalid image type when trying to read image data\n";
+        }
+        return false;
+    }
+
+    if( mVerbose )
+    {
+        std::cerr << "Chunk IEND found, ending read\n";
+    }
+    return true;   
+}
+
+void Loader::FillColourPlanes(const std::vector<uint8_t>pDecompressedImageData,std::vector<uint8_t>& rRowFilters)
+{
+    rRowFilters.resize(mHeight);
+    // Prepare the image buffers.
+    // Internally I store as 8 bit per channel.
+    // So for 16bit channel data we'll be loosing data. 
+    // This is not meant to be an all signing all dancing implementation.
+    // Just a tiny one. :)
+    mRed.resize(mWidth*mHeight);
+    mGreen.resize(mWidth*mHeight);
+    mBlue.resize(mWidth*mHeight);
+    mAlpha.resize(mWidth*mHeight);    
+
 
     // First we need to fill in all the image data.
     // I think this will only work for 8 bit. As for 16bit I down sample to 8bit. So may need to rework the logic here.
@@ -388,45 +435,79 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
     // So record it for use later. Can't do the filtering till all data is in.
     // The spec calls it a filter but its more of a post process reconstitution as they
     // modify the data to make the compression more optimal.
+    const uint8_t* src = pDecompressedImageData.data();
+    size_t writePos = 0;
     if( mBitDepth == 8 )
     {
-        const uint8_t* src = pImageData.data();
-        int writePos = 0;
         for( size_t y = 0 ; y < mHeight ; y++ )
         {
-            filters[y] = src[0];
+            rRowFilters[y] = src[0];
             src++;
-            for( size_t x = 0 ; x < mWidth ; x++, src += 3, writePos++)
+            if( mHasAlpha )
             {
-                mRed[writePos]      = src[0];
-                mGreen[writePos]    = src[1];
-                mBlue[writePos]     = src[2];
-                mAlpha[writePos]    = 255;
+                for( size_t x = 0 ; x < mWidth ; x++, src += mBytesPerPixel, writePos++)
+                {
+                    mRed[writePos]      = src[0];
+                    mGreen[writePos]    = src[1];
+                    mBlue[writePos]     = src[2];
+                    mAlpha[writePos]    = src[3];
+                }
+            }
+            else
+            {
+                for( size_t x = 0 ; x < mWidth ; x++, src += mBytesPerPixel, writePos++)
+                {
+                    mRed[writePos]      = src[0];
+                    mGreen[writePos]    = src[1];
+                    mBlue[writePos]     = src[2];
+                    mAlpha[writePos]    = 0;
+                }
             }
         }
     }
     else if( mBitDepth == 16 )
     {
-        const uint8_t* src = pImageData.data();
-        int writePos = 0;
         for( size_t y = 0 ; y < mHeight ; y++ )
         {
-            filters[y] = src[0];
+            rRowFilters[y] = src[0];
             src++;
-            for( size_t x = 0 ; x < mWidth ; x++, src += 6, writePos++)
+            
+            if( mHasAlpha )
             {
-                mRed[writePos]      = src[0];
-                mGreen[writePos]    = src[2];
-                mBlue[writePos]     = src[4];
-                mAlpha[writePos]    = 255;
+                for( size_t x = 0 ; x < mWidth ; x++, src += mBytesPerPixel, writePos++)
+                {
+                    mRed[writePos]      = src[0];
+                    mGreen[writePos]    = src[2];
+                    mBlue[writePos]     = src[4];
+                    mAlpha[writePos]    = src[6];
+                }
+            }
+            else
+            {
+                for( size_t x = 0 ; x < mWidth ; x++, src += mBytesPerPixel, writePos++)
+                {
+                    mRed[writePos]      = src[0];
+                    mGreen[writePos]    = src[2];
+                    mBlue[writePos]     = src[4];
+                    mAlpha[writePos]    = 0;
+                }
+
             }
         }
     }
     else if( mVerbose )
     {
         std::cerr << "Invalid bit depth for true colour image, can only be 8 or 16 but we have " << mBitDepth << "\n";
-    }
+    }    
+}
 
+void Loader::PushGreyscalePixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters)
+{
+
+}
+
+void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters)
+{
     // Now we'll apply the filters.
     u_int8_t* r = mRed.data();
     u_int8_t* g = mGreen.data();
@@ -434,7 +515,7 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 
     for( size_t y = 0 ; y < mHeight ; y++, r += mWidth, g += mWidth, b += mWidth )
     {
-        switch(filters[y])
+        switch(pRowFilters[y])
         {
         case 0:
             // No nothing
@@ -488,63 +569,16 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
     }
 }
 
-void Loader::PushIndexPixels(const std::vector<uint8_t>& pImageData)
+void Loader::PushIndexPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters)
 {
 }
 
-void Loader::PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData)
+void Loader::PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters)
 {
 }
 
-void Loader::PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData)
+void Loader::PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters)
 {
-    std::vector<uint8_t> filters(mHeight);
-
-    // First we need to fill in all the image data.
-    // I think this will only work for 8 bit. As for 16bit I down sample to 8bit. So may need to rework the logic here.
-    // First byte of the incoming data is always the filter type.
-    // So record it for use later. Can't do the filtering till all data is in.
-    // The spec calls it a filter but its more of a post process reconstitution as they
-    // modify the data to make the compression more optimal.
-    if( mBitDepth == 8 )
-    {
-        const uint8_t* src = pImageData.data();
-        int writePos = 0;
-        for( size_t y = 0 ; y < mHeight ; y++ )
-        {
-            filters[y] = src[0];
-            src++;
-            for( size_t x = 0 ; x < mWidth ; x++, src += 4, writePos++)
-            {
-                mRed[writePos]      = src[0];
-                mGreen[writePos]    = src[1];
-                mBlue[writePos]     = src[2];
-                mAlpha[writePos]    = src[3];
-            }
-        }
-    }
-    else if( mBitDepth == 16 )
-    {
-        const uint8_t* src = pImageData.data();
-        int writePos = 0;
-        for( size_t y = 0 ; y < mHeight ; y++ )
-        {
-            filters[y] = src[0];
-            src++;
-            for( size_t x = 0 ; x < mWidth ; x++, src += 8, writePos++)
-            {
-                mRed[writePos]      = src[0];
-                mGreen[writePos]    = src[2];
-                mBlue[writePos]     = src[4];
-                mAlpha[writePos]    = src[6];
-            }
-        }
-    }
-    else if( mVerbose )
-    {
-        std::cerr << "Invalid bit depth for true colour image, can only be 8 or 16 but we have " << mBitDepth << "\n";
-    }
-
     // Now we'll apply the filters.
     u_int8_t* r = mRed.data();
     u_int8_t* g = mGreen.data();
@@ -553,7 +587,7 @@ void Loader::PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData)
 
     for( size_t y = 0 ; y < mHeight ; y++, r += mWidth, g += mWidth, b += mWidth, a += mWidth )
     {
-        switch(filters[y])
+        switch(pRowFilters[y])
         {
         case 0:
             // No nothing

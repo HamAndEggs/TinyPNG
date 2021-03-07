@@ -31,6 +31,12 @@
 namespace tinypng{ // Using a namespace to try to prevent name clashes as my class names are kind of obvious :)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct PNGChunk; //!< Forwad decleration of internal structure.
+
+/**
+ * @brief 
+ * 
+ */
 class Loader
 {
 public:
@@ -94,6 +100,8 @@ private:
     uint32_t mWidth;
     uint32_t mHeight;
     int mBitDepth;
+    int mBytesPerPixel;
+    bool mHasAlpha;
     PNGColourType mType;
     int mCompressionMethod;
     int mFilterMethod;
@@ -103,11 +111,16 @@ private:
     // There will be supporting functions to return the data in the most popular arrangements.
     std::vector<uint8_t> mRed,mGreen,mBlue,mAlpha;
 
-    void PushGreyscalePixels(const std::vector<uint8_t>& pImageData);
-    void PushTrueColour(const std::vector<uint8_t>& pImageData);
-    void PushIndexPixels(const std::vector<uint8_t>& pImageData);
-    void PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData);
-    void PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData);
+    bool ReadImageHeader(const PNGChunk& pChunk);
+    bool BuildImage(const std::vector<uint8_t>& pCompressionData);    
+
+    void FillColourPlanes(const std::vector<uint8_t>pDecompressedImageData,std::vector<uint8_t>& rRowFilters);
+
+    void PushGreyscalePixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters);
+    void PushTrueColour(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters);
+    void PushIndexPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters);
+    void PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters);
+    void PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData,const std::vector<uint8_t>pRowFilters);
 
 };
 
