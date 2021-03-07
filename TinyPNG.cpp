@@ -13,6 +13,64 @@
 namespace tinypng{ // Using a namespace to try to prevent name clashes as my class names are kind of obvious :)
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+// x	the byte being filtered;
+// a	the byte corresponding to x in the pixel immediately before the pixel containing x (or the byte immediately before x, when the bit depth is less than 8);
+// b	the byte corresponding to x in the previous scanline;
+// c	the byte corresponding to b in the pixel immediately before the pixel containing b (or the byte immediately before b, when the bit depth is less than 8).
+
+// Type	Name	Filter Function	Reconstruction Function
+// 0	None	Filt(x) = Orig(x)	Recon(x) = Filt(x)
+// 1	Sub     Filt(x) = Orig(x) - Orig(a)	Recon(x) = Filt(x) + Recon(a)
+// 2	Up      Filt(x) = Orig(x) - Orig(b)	Recon(x) = Filt(x) + Recon(b)
+// 3	Average	Filt(x) = Orig(x) - floor((Orig(a) + Orig(b)) / 2)	Recon(x) = Filt(x) + floor((Recon(a) + Recon(b)) / 2)
+// 4	Paeth	Filt(x) = Orig(x) - PaethPredictor(Orig(a), Orig(b), Orig(c))	Recon(x) = Filt(x) + PaethPredictor(Recon(a), Recon(b), Recon(c))
+
+inline uint8_t PreviousPixel(const uint8_t* pC)
+{
+    const int a = *(pC - 1);
+    const int x = *pC;
+    return (uint8_t)((x + a));
+};
+
+inline uint8_t PreviousRow(const uint8_t* pC,size_t pWidth)
+{
+    const int b = *(pC - pWidth);
+    const int x = *pC;
+    return (uint8_t)((x + b));
+};
+
+inline uint8_t Average(const uint8_t* pC,size_t pWidth)
+{
+    const int a = *(pC - 1);
+    const int b = *(pC - pWidth);
+    const int x = *pC;
+    return (uint8_t)((x + ((a + b) / 2)));
+};
+
+inline uint8_t Paeth(const uint8_t* pC,size_t pWidth)
+{
+    const int a = *(pC - 1);
+    const int b = *(pC - pWidth);
+    const int c = *(pC - 1 - pWidth);
+    const int x = *pC;
+    const int p = a + b - c;
+    const int pa = std::abs(p - a);
+    const int pb = std::abs(p - b);
+    const int pc = std::abs(p - c);
+
+    if( pa <= pb && pa <= pc )
+    {
+        return (uint8_t)(x+a);
+    }
+    else if( pb <= pc )
+    {
+        return (uint8_t)(x+b);
+    }
+
+    return (uint8_t)(x+c);
+};
+
 struct PNGChunk
 {
     uint32_t mLength;
@@ -75,16 +133,15 @@ struct PNGChunk
 };
 
 Loader::Loader(bool pVerbose) :
-    mVerbose(pVerbose),
-    mWidth(0),
-    mHeight(0),
-    mBitDepth(0),
-    mType(CT_INVALID)
+    mVerbose(pVerbose)
 {
+    Clear();
 }
 
 bool Loader::LoadFromFile(const std::string& pFilename)
 {
+    Clear();
+
     std::ifstream InputFile(pFilename,std::ifstream::binary);
     if( InputFile )
     {
@@ -174,7 +231,6 @@ bool Loader::LoadFromMemory(const std::vector<uint8_t>& pMemory)
                     return false;
 
                 std::clog << "Decompressed size is " << infstream.total_out << "\n";
-                imageBuffer.resize(infstream.total_out);
 
                 switch( mType )
                 {
@@ -303,6 +359,20 @@ bool Loader::GetRGB(std::vector<uint8_t>& rRGB)const
     return true;
 }
 
+void Loader::Clear()
+{
+    mWidth = 0;
+    mHeight = 0;
+    mBitDepth = 0;
+    mType = CT_INVALID;
+
+    mRed.resize(0);
+    mGreen.resize(0);
+    mBlue.resize(0);
+    mAlpha.resize(0);
+
+}
+
 void Loader::PushGreyscalePixels(const std::vector<uint8_t>& pImageData)
 {
 
@@ -311,63 +381,6 @@ void Loader::PushGreyscalePixels(const std::vector<uint8_t>& pImageData)
 void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 {
     std::vector<uint8_t> filters(mHeight);
-
-// x	the byte being filtered;
-// a	the byte corresponding to x in the pixel immediately before the pixel containing x (or the byte immediately before x, when the bit depth is less than 8);
-// b	the byte corresponding to x in the previous scanline;
-// c	the byte corresponding to b in the pixel immediately before the pixel containing b (or the byte immediately before b, when the bit depth is less than 8).
-
-// Type	Name	Filter Function	Reconstruction Function
-// 0	None	Filt(x) = Orig(x)	Recon(x) = Filt(x)
-// 1	Sub     Filt(x) = Orig(x) - Orig(a)	Recon(x) = Filt(x) + Recon(a)
-// 2	Up      Filt(x) = Orig(x) - Orig(b)	Recon(x) = Filt(x) + Recon(b)
-// 3	Average	Filt(x) = Orig(x) - floor((Orig(a) + Orig(b)) / 2)	Recon(x) = Filt(x) + floor((Recon(a) + Recon(b)) / 2)
-// 4	Paeth	Filt(x) = Orig(x) - PaethPredictor(Orig(a), Orig(b), Orig(c))	Recon(x) = Filt(x) + PaethPredictor(Recon(a), Recon(b), Recon(c))
-
-    auto PreviousPixel = [this](const uint8_t* pC)
-    {
-        const int a = *(pC - 1);
-        const int x = *pC;
-        return (uint8_t)((x + a));
-    };
-
-    auto PreviousRow = [this](const uint8_t* pC)
-    {
-        const int b = *(pC - mWidth);
-        const int x = *pC;
-        return (uint8_t)((x + b));
-    };
-
-    auto Average = [this](const uint8_t* pC)
-    {
-        const int a = *(pC - 1);
-        const int b = *(pC - mWidth);
-        const int x = *pC;
-        return (uint8_t)((x + ((a + b) / 2)));
-    };
-
-    auto Paeth = [this](const uint8_t* pC)
-    {
-        const int a = *(pC - 1);
-        const int b = *(pC - mWidth);
-        const int c = *(pC - 1 - mWidth);
-        const int x = *pC;
-        const int p = a + b - c;
-        const int pa = std::abs(p - a);
-        const int pb = std::abs(p - b);
-        const int pc = std::abs(p - c);
-
-        if( pa <= pb && pa <= pc )
-        {
-            return (uint8_t)(x+a);
-        }
-        else if( pb <= pc )
-        {
-            return (uint8_t)(x+b);
-        }
-
-        return (uint8_t)(x+c);
-    };
 
     // First we need to fill in all the image data.
     // I think this will only work for 8 bit. As for 16bit I down sample to 8bit. So may need to rework the logic here.
@@ -441,9 +454,9 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
             // Add the previous rows value onto the current one.
             for( size_t x = 0 ; x < mWidth ; x++ )
             {
-                r[x] = PreviousRow(r + x);
-                g[x] = PreviousRow(g + x);
-                b[x] = PreviousRow(b + x);
+                r[x] = PreviousRow(r + x,mWidth);
+                g[x] = PreviousRow(g + x,mWidth);
+                b[x] = PreviousRow(b + x,mWidth);
             }
             break;
 
@@ -454,21 +467,21 @@ void Loader::PushTrueColour(const std::vector<uint8_t>& pImageData)
 
             for( size_t x = 1 ; x < mWidth ; x++ )
             {
-                r[x] = Average(r + x);
-                g[x] = Average(g + x);
-                b[x] = Average(b + x);
+                r[x] = Average(r + x,mWidth);
+                g[x] = Average(g + x,mWidth);
+                b[x] = Average(b + x,mWidth);
             }
             break;
 
         case 4://paeth
-            r[0] = PreviousRow(r);
-            g[0] = PreviousRow(g);
-            b[0] = PreviousRow(b);
+            r[0] = PreviousRow(r,mWidth);
+            g[0] = PreviousRow(g,mWidth);
+            b[0] = PreviousRow(b,mWidth);
             for( size_t x = 1 ; x < mWidth ; x++ )
             {
-                r[x] = Paeth(r + x);
-                g[x] = Paeth(g + x);
-                b[x] = Paeth(b + x);
+                r[x] = Paeth(r + x,mWidth);
+                g[x] = Paeth(g + x,mWidth);
+                b[x] = Paeth(b + x,mWidth);
             }
             break;
         }
@@ -485,7 +498,119 @@ void Loader::PushGreyscaleAlphaPixels(const std::vector<uint8_t>& pImageData)
 
 void Loader::PushTrueColourAlphaPixels(const std::vector<uint8_t>& pImageData)
 {
+    std::vector<uint8_t> filters(mHeight);
 
+    // First we need to fill in all the image data.
+    // I think this will only work for 8 bit. As for 16bit I down sample to 8bit. So may need to rework the logic here.
+    // First byte of the incoming data is always the filter type.
+    // So record it for use later. Can't do the filtering till all data is in.
+    // The spec calls it a filter but its more of a post process reconstitution as they
+    // modify the data to make the compression more optimal.
+    if( mBitDepth == 8 )
+    {
+        const uint8_t* src = pImageData.data();
+        int writePos = 0;
+        for( size_t y = 0 ; y < mHeight ; y++ )
+        {
+            filters[y] = src[0];
+            src++;
+            for( size_t x = 0 ; x < mWidth ; x++, src += 4, writePos++)
+            {
+                mRed[writePos]      = src[0];
+                mGreen[writePos]    = src[1];
+                mBlue[writePos]     = src[2];
+                mAlpha[writePos]    = src[3];
+            }
+        }
+    }
+    else if( mBitDepth == 16 )
+    {
+        const uint8_t* src = pImageData.data();
+        int writePos = 0;
+        for( size_t y = 0 ; y < mHeight ; y++ )
+        {
+            filters[y] = src[0];
+            src++;
+            for( size_t x = 0 ; x < mWidth ; x++, src += 8, writePos++)
+            {
+                mRed[writePos]      = src[0];
+                mGreen[writePos]    = src[2];
+                mBlue[writePos]     = src[4];
+                mAlpha[writePos]    = src[6];
+            }
+        }
+    }
+    else if( mVerbose )
+    {
+        std::cerr << "Invalid bit depth for true colour image, can only be 8 or 16 but we have " << mBitDepth << "\n";
+    }
+
+    // Now we'll apply the filters.
+    u_int8_t* r = mRed.data();
+    u_int8_t* g = mGreen.data();
+    u_int8_t* b = mBlue.data();
+    u_int8_t* a = mAlpha.data();
+
+    for( size_t y = 0 ; y < mHeight ; y++, r += mWidth, g += mWidth, b += mWidth, a += mWidth )
+    {
+        switch(filters[y])
+        {
+        case 0:
+            // No nothing
+            break;
+            
+         case 1:
+            // Add the previous value onto the current one.
+            for( size_t x = 1 ; x < mWidth ; x++ )
+            {
+                r[x] = PreviousPixel(r + x);
+                g[x] = PreviousPixel(g + x);
+                b[x] = PreviousPixel(b + x);
+                a[x] = PreviousPixel(a + x);
+            }
+            break;
+
+        case 2:
+            // Add the previous rows value onto the current one.
+            for( size_t x = 0 ; x < mWidth ; x++ )
+            {
+                r[x] = PreviousRow(r + x,mWidth);
+                g[x] = PreviousRow(g + x,mWidth);
+                b[x] = PreviousRow(b + x,mWidth);
+                a[x] = PreviousRow(a + x,mWidth);
+            }
+            break;
+
+        case 3://Average
+            r[0] = (uint8_t)(((int)(r[0]) + (int)(*(r-mWidth))/2) & 0xff);
+            g[0] = (uint8_t)(((int)(g[0]) + (int)(*(g-mWidth))/2) & 0xff);
+            b[0] = (uint8_t)(((int)(b[0]) + (int)(*(b-mWidth))/2) & 0xff);
+            a[0] = (uint8_t)(((int)(a[0]) + (int)(*(a-mWidth))/2) & 0xff);
+
+            for( size_t x = 1 ; x < mWidth ; x++ )
+            {
+                r[x] = Average(r + x,mWidth);
+                g[x] = Average(g + x,mWidth);
+                b[x] = Average(b + x,mWidth);
+                a[x] = Average(a + x,mWidth);
+            }
+            break;
+
+        case 4://paeth
+            r[0] = PreviousRow(r,mWidth);
+            g[0] = PreviousRow(g,mWidth);
+            b[0] = PreviousRow(b,mWidth);
+            a[0] = PreviousRow(a,mWidth);
+            for( size_t x = 1 ; x < mWidth ; x++ )
+            {
+                r[x] = Paeth(r + x,mWidth);
+                g[x] = Paeth(g + x,mWidth);
+                b[x] = Paeth(b + x,mWidth);
+                a[x] = Paeth(a + x,mWidth);
+            }
+            break;
+        }
+    }
 }
 
 

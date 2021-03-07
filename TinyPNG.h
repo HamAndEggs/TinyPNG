@@ -83,6 +83,12 @@ public:
      */
     bool GetRGB(std::vector<uint8_t>& rRGB)const;
 
+    /**
+     * @brief Makes the loaded image go away.
+     * 
+     */
+    void Clear();
+
 private:
     const bool mVerbose;
     uint32_t mWidth;

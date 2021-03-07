@@ -19,10 +19,13 @@ static bool UnitTest1(FBIO::FrameBuffer* FB)
 
     tinypng::Loader png(true);
 
-    const std::array<const char*,3> tests = {
+    const std::vector<const char*> tests = {
         "./rose.png",
+        "./rose-alpha.png",
         "./rgb-8.png",
         "./rgb-16.png",
+        "./rgb-alpha-8.png",
+        "./rgb-alpha-16.png"
     };
 
     for( auto f : tests )
@@ -45,7 +48,9 @@ static bool UnitTest1(FBIO::FrameBuffer* FB)
 
             FB->Present();
 
-            sleep(5);
+            sleep(2);
+            FB->ClearScreen(0,0,0);
+            FB->ClearScreen(0,0,0);
         }
         else
         {
