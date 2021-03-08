@@ -90,6 +90,24 @@ public:
     bool GetRGB(std::vector<uint8_t>& rRGB)const;
 
     /**
+     * @brief Will return a 32bit image in RGBA order. Will convert the original data to correct bit depth.
+     * Alpha is set to 255 if was not already in source image.
+     * 
+     * @param rRGBA 
+     * @return true 
+     * @return false 
+     */
+    bool GetRGBA(std::vector<uint8_t>& rRGBA)const;
+
+    /**
+     * @brief Gets the alpha status of the PNG file.
+     * 
+     * @return true 
+     * @return false 
+     */
+    bool GetHasAlpha()const{return mHasAlpha;}
+
+    /**
      * @brief Makes the loaded image go away.
      * 
      */

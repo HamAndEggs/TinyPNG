@@ -7,13 +7,13 @@
 #include <unistd.h>
 
 #include "../TinyPNG.h"
-#include "framebuffer.h"
+#include "Tiny2D.h"
 
 /**
  * @brief
  * 
  */
-static bool UnitTest1(FBIO::FrameBuffer* FB)
+static bool UnitTest1(tiny2d::FrameBuffer* FB)
 {
     std::cout << "Running test, small PNG\n";
 
@@ -34,16 +34,46 @@ static bool UnitTest1(FBIO::FrameBuffer* FB)
         {
             FB->ClearScreen(0,0,0);
 
-            std::vector<uint8_t> RGB;
+            const int size = 20;
 
-            if( png.GetRGB(RGB) )
+            for( int y = 0 ; y < FB->GetHeight() ; y += size )
             {
-                FB->BlitRGB24(RGB.data(),0,0,png.GetWidth(),png.GetHeight());
+                for( int x = 0 ; x < FB->GetWidth() ; x += size )
+                {
+                    if( ((x/size)&1) == ((y/size)&1) )
+                        FB->DrawRectangle(x,y,x+size,y+size,255,255,255,true);
+                    else
+                        FB->DrawRectangle(x,y,x+size,y+size,0,0,0,true);
+                }
+            }
+
+            if( png.GetHasAlpha() )
+            {
+                std::vector<uint8_t> RGBA;
+
+                if( png.GetRGBA(RGBA) )
+                {
+                    FB->BlitRGBA(RGBA.data(),0,0,png.GetWidth(),png.GetHeight());
+                }
+                else
+                {
+                    std::cout << "Failed to get RGBA for PNG " << f << "\n";
+                    return false;
+                }
             }
             else
             {
-                std::cout << "Failed to get RGB for PNG " << f << "\n";
-                return false;
+                std::vector<uint8_t> RGB;
+
+                if( png.GetRGB(RGB) )
+                {
+                    FB->BlitRGB(RGB.data(),0,0,png.GetWidth(),png.GetHeight());
+                }
+                else
+                {
+                    std::cout << "Failed to get RGB for PNG " << f << "\n";
+                    return false;
+                }
             }
 
             FB->Present();
@@ -72,7 +102,7 @@ int main(int argc, char *argv[])
     std::cout << "Build date " << APP_BUILD_DATE << '\n';
     std::cout << "Build time " << APP_BUILD_TIME << '\n';
 
-   	FBIO::FrameBuffer* FB = FBIO::FrameBuffer::Open(true,true);
+   	tiny2d::FrameBuffer* FB = tiny2d::FrameBuffer::Open(true);
 	if( !FB )
 		return EXIT_FAILURE;
 

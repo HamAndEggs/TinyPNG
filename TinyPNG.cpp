@@ -259,6 +259,23 @@ bool Loader::GetRGB(std::vector<uint8_t>& rRGB)const
     return true;
 }
 
+bool Loader::GetRGBA(std::vector<uint8_t>& rRGBA)const
+{
+    rRGBA.resize(mWidth*mHeight*4);
+
+    uint8_t* dest = rRGBA.data();
+
+    for( uint32_t n = 0 ; n < (mWidth*mHeight) ; n++, dest += 4 )
+    {
+        dest[0] = mRed[n];
+        dest[1] = mGreen[n];
+        dest[2] = mBlue[n];
+        dest[3] = mAlpha[n];
+    }
+
+    return true;
+}
+
 void Loader::Clear()
 {
     mWidth = 0;

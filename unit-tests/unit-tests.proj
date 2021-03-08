@@ -1,7 +1,7 @@
 {
     "source_files": [
         "unit-tests.cpp",
-        "framebuffer.cpp",
+        "Tiny2D.cpp",
         "../TinyPNG.cpp"
     ],
     "configurations": {
