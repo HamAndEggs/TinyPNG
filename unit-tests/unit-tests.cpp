@@ -32,18 +32,18 @@ static bool UnitTest1(tiny2d::FrameBuffer* FB)
     {
         if( png.LoadFromFile(f) )
         {
-            FB->ClearScreen(0,0,0);
+            tiny2d::DrawBuffer RT(FB);
 
             const int size = 20;
 
-            for( int y = 0 ; y < FB->GetHeight() ; y += size )
+            for( int y = 0 ; y < RT.GetHeight() ; y += size )
             {
-                for( int x = 0 ; x < FB->GetWidth() ; x += size )
+                for( int x = 0 ; x < RT.GetWidth() ; x += size )
                 {
                     if( ((x/size)&1) == ((y/size)&1) )
-                        FB->DrawRectangle(x,y,x+size,y+size,255,255,255,true);
+                        RT.FillRectangle(x,y,x+size,y+size,255,255,255);
                     else
-                        FB->DrawRectangle(x,y,x+size,y+size,0,0,0,true);
+                        RT.FillRectangle(x,y,x+size,y+size,0,0,0);
                 }
             }
 
@@ -53,7 +53,7 @@ static bool UnitTest1(tiny2d::FrameBuffer* FB)
 
                 if( png.GetRGBA(RGBA) )
                 {
-                    FB->BlitRGBA(RGBA.data(),0,0,png.GetWidth(),png.GetHeight());
+                    RT.BlitRGBA(RGBA.data(),0,0,png.GetWidth(),png.GetHeight());
                 }
                 else
                 {
@@ -67,7 +67,7 @@ static bool UnitTest1(tiny2d::FrameBuffer* FB)
 
                 if( png.GetRGB(RGB) )
                 {
-                    FB->BlitRGB(RGB.data(),0,0,png.GetWidth(),png.GetHeight());
+                    RT.BlitRGB(RGB.data(),0,0,png.GetWidth(),png.GetHeight());
                 }
                 else
                 {
@@ -76,11 +76,9 @@ static bool UnitTest1(tiny2d::FrameBuffer* FB)
                 }
             }
 
-            FB->Present();
+            FB->Present(RT);
 
             sleep(2);
-            FB->ClearScreen(0,0,0);
-            FB->ClearScreen(0,0,0);
         }
         else
         {
@@ -108,17 +106,11 @@ int main(int argc, char *argv[])
 
     bool AllGood = true;
 
-    FB->ClearScreen(0,0,0);
-    FB->Present();
-
     if( UnitTest1(FB) == false )
     {
         std::cerr << "Unit test 1 failed\n";
         AllGood = false;
     }
-
-	// Stop monitor burn in...
-	FB->ClearScreen(0,0,0);
 	
 	delete FB;
 
